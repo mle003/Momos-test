@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:5.7
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: scraping_db
+      MYSQL_USER: scraping_user
+      MYSQL_PASSWORD: scraping_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  app:
+    build: .
+    container_name: web_scraping_app
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_USER: scraping_user
+      DB_PASSWORD: scraping_password
+      DB_NAME: scraping_db
+      DB_CONNECTION_LIMIT: 10
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
