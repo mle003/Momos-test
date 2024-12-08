@@ -18,7 +18,6 @@ const Logger = winston.createLogger({
     ],
 });
 
-// Apply the colors to winston
 winston.addColors(LogLevels.colors);
 
 module.exports = Logger

@@ -1,10 +1,11 @@
 const express = require('express');
+const cors = require('cors')
 
+const Logger = require('./utils/logger');
 const { Auth } = require("./middlewares/authentication")
 const { LoggingMiddleware } = require("./middlewares/logging")
 const { ErrorHandler } = require("./middlewares/errorHandler")
 const { DbPool, InitilizeTables } = require("./db")
-
 const { Scraping } = require("./modules/scraping")
 const { GetAllImages } = require("./modules/displaying/images")
 const { GetAllVideos } = require("./modules/displaying/videos")
@@ -12,6 +13,7 @@ const { GetAllVideos } = require("./modules/displaying/videos")
 const app = express();
 app.use(express.json());
 
+app.use(cors())
 
 app.use(Auth);
 app.use(LoggingMiddleware);
@@ -25,10 +27,9 @@ app.get('/videos', GetAllVideos(DbPool))
 
 app.use(ErrorHandler);
 
-// Create tables when the server starts
 InitilizeTables().then(() => {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
+        Logger.info(`Server is running on port ${PORT}`);
     });
 });

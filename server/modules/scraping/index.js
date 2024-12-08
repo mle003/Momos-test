@@ -1,12 +1,14 @@
 const puppeteer = require('puppeteer');
 const axios = require('axios');
-const logger = require('../../utils/logger');
+const Logger = require('../../utils/logger');
+
+const httpsProtocol = "https:/"
 
 const Scraping = (pool) => async (req, res, next) => {
     const { urls } = req.body;
 
     if (!Array.isArray(urls)) {
-        logger.warn('Invalid input: Expected an array of URLs');
+        Logger.warn('Invalid input: Expected an array of URLs');
         return res.status(400).send('Invalid input. Expected an array of URLs.');
     }
 
@@ -14,6 +16,8 @@ const Scraping = (pool) => async (req, res, next) => {
     const imageErrors = [];
     const videoErrors = [];
     const invalidUrls = [];
+    const allImages = [];
+    const allVideos = [];
 
     try {
         const browser = await puppeteer.launch();
@@ -25,19 +29,23 @@ const Scraping = (pool) => async (req, res, next) => {
 
             const connection = await pool.getConnection();
 
+            const [urlResult] = await connection.query(
+                'INSERT INTO URLs (url, is_valid) VALUES (?, ?)',
+                [url, true]
+            );
+            urlId = urlResult.insertId;
+
             try {
                 const page = await browser.newPage();
-                await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+                await page.goto(url, { waitUntil: 'networkidle2', timeout: 120000 });
 
-                // Scrape title
                 const title = await page.title();
                 result.title = title;
 
-                const [urlResult] = await connection.query(
-                    'INSERT INTO URLs (url, title) VALUES (?, ?)',
-                    [url, title]
+                await pool.query(
+                    'UPDATE URLs SET title = ? WHERE id = ?',
+                    [title, urlId]
                 );
-                urlId = urlResult.insertId;
 
                 // Use Axios for CSR scraping
                 try {
@@ -47,87 +55,33 @@ const Scraping = (pool) => async (req, res, next) => {
                     const videos = extractVideosFromHtml(html);
 
                     for (const { url: imageUrl, title: imageTitle } of images) {
-                        // Check if the image URL already exists in the database
-                        const [existingImage] = await connection.query(
-                            'SELECT id FROM Images WHERE image_url = ?',
-                            [imageUrl]
-                        );
-
-                        if (existingImage.length === 0) {
-                            await connection.query(
-                                'INSERT INTO Images (url_id, image_url, title) VALUES (?, ?, ?)',
-                                [urlId, imageUrl, imageTitle]
-                            );
-                            result.images.push({ url: imageUrl, title: imageTitle });
-                        }
+                        allImages.push({ urlId, imageUrl, imageTitle });
                     }
 
                     for (const { url: videoUrl, title: videoTitle } of videos) {
-                        // Check if the video URL already exists in the database
-                        const [existingVideo] = await connection.query(
-                            'SELECT id FROM Videos WHERE video_url = ?',
-                            [videoUrl]
-                        );
-
-                        if (existingVideo.length === 0) {
-                            await connection.query(
-                                'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
-                                [urlId, videoUrl, videoTitle]
-                            );
-                            result.videos.push({ url: videoUrl, title: videoTitle });
-                        }
+                        allVideos.push({ urlId, videoUrl, videoTitle });
                     }
                 } catch (error) {
-                    logger.warn(`Error scraping with Axios ${url}: ${error.message}`);
+                    Logger.warn(`Error scraping with Axios ${url}: ${error.message}`);
                 }
 
                 // SSR scraping
                 try {
                     const images = await page.$$eval('img', imgs => imgs.map(img => ({ url: img.src, title: img.alt })).filter(img => img.url));
                     for (const { url: imageUrl, title: imageTitle } of images) {
-                        // Check if the image URL already exists in the database
-                        const [existingImage] = await connection.query(
-                            'SELECT id FROM Images WHERE image_url = ?',
-                            [imageUrl]
-                        );
-
-                        if (existingImage.length === 0) {
-                            await connection.query(
-                                'INSERT INTO Images (url_id, image_url, title) VALUES (?, ?, ?)',
-                                [urlId, imageUrl, imageTitle]
-                            );
-                            result.images.push({ url: imageUrl, title: imageTitle });
-                        }
+                        allImages.push({ urlId, imageUrl, imageTitle });
                     }
 
-                    const videos = [];
+                    const iframeVideos = await extractVideoUrlsFromIFrame(page);
+                    allVideos.push(...iframeVideos.map(video => ({ ...video, urlId })));
 
-                    const iframeVideos = await extractVideoUrlsFromIFrame(page, connection, urlId);
-                    videos.push(...iframeVideos);
+                    const otherVideos = await extractVideoUrlsFromVideoElements(page);
+                    allVideos.push(...otherVideos.map(video => ({ ...video, urlId })));
 
-                    const otherVideos = await extractVideoUrlsFromVideoElements(page, connection, urlId);
-                    videos.push(...otherVideos);
+                    const videos2 = await extractVideoUrlsFromNetwork(page);
+                    allVideos.push(...videos2.map(video => ({ ...video, urlId })));
 
-                    const videos2 = await extractVideoUrlsFromNetwork(page, connection, urlId);
-                    videos.push(...videos2);
-
-                    for (const { url: videoUrl, title: videoTitle } of videos) {
-                        // Check if the video URL already exists in the database
-                        const [existingVideo] = await connection.query(
-                            'SELECT id FROM Videos WHERE video_url = ?',
-                            [videoUrl]
-                        );
-
-                        if (existingVideo.length === 0) {
-                            await connection.query(
-                                'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
-                                [urlId, videoUrl, videoTitle]
-                            );
-                            result.videos.push({ url: videoUrl, title: videoTitle });
-                        }
-                    }
-
-                    if (videos.length === 0) {
+                    if (allVideos.length === 0) {
                         throw new Error('No videos found');
                     }
                 } catch (error) {
@@ -138,22 +92,25 @@ const Scraping = (pool) => async (req, res, next) => {
             } catch (error) {
                 invalidUrls.push({ url, error: error.message });
 
+                await pool.query(
+                    'UPDATE URLs SET is_valid = FALSE WHERE id = ?',
+                    [urlId]
+                );
+
                 await connection.query(
                     'INSERT INTO Errors (url_id, error_type, error_message) VALUES (?, ?, ?)',
                     [urlId, 'invalid', error.message]
                 );
+                connection.release();
+                return null
             } finally {
                 connection.release();
             }
+            
+            result.images = allImages
+            result.videos = allVideos
 
-            if (result.images.length > 0 || result.videos.length > 0) {
-                results.push(result);
-
-                await pool.query(
-                    'UPDATE URLs SET is_valid = TRUE WHERE id = ?',
-                    [urlId]
-                );
-            }
+            results.push(result);
 
             if (imageError) {
                 imageErrors.push({ url, error: imageError });
@@ -173,6 +130,62 @@ const Scraping = (pool) => async (req, res, next) => {
                 );
             }
         }));
+
+        for (const { urlId, imageUrl, imageTitle } of allImages) {
+            if(!imageUrl) {
+                continue
+            }
+            let updateUrl = imageUrl
+            if(!updateUrl.startsWith(httpsProtocol) && !updateUrl.startsWith("/")) {
+                Logger.warn(`${updateUrl} is invalid`)
+            }
+            if (!updateUrl.startsWith(httpsProtocol)) {
+                updateUrl = httpsProtocol + updateUrl
+            }
+            const connection = await pool.getConnection();
+            const [existingImage] = await connection.query(
+                'SELECT id FROM Images WHERE image_url = ? LIMIT 1',
+                [updateUrl]
+            );
+
+            let title = imageTitle && imageTitle.length > 0 ? imageTitle : "This image has no title"
+
+            if (existingImage.length === 0) {
+                await connection.query(
+                    'INSERT INTO Images (url_id, image_url, title) VALUES (?, ?, ?)',
+                    [urlId, updateUrl, title]
+                );
+            }
+            connection.release();
+        }
+
+        for (const { urlId, url, videoTitle } of allVideos) {
+            if (!url) {
+                continue
+            }
+            let updateUrl = url
+            if(!updateUrl.startsWith(httpsProtocol) && !updateUrl.startsWith("/")) {
+                Logger.warn(`${updateUrl} is invalid`)
+            }
+            if (!updateUrl.startsWith(httpsProtocol)) {
+                updateUrl = httpsProtocol + updateUrl
+            }
+            const connection = await pool.getConnection();
+            const [existingVideo] = await connection.query(
+                'SELECT id FROM Videos WHERE video_url = ? LIMIT 1',
+                [updateUrl]
+            );
+
+            let title = videoTitle && videoTitle.length > 0 ? videoTitle : "This video has no title"
+
+            if (existingVideo.length === 0) {
+                await connection.query(
+                    'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
+                    [urlId, updateUrl, title]
+                );
+            }
+            connection.release();
+        }
 
         await browser.close();
         res.json({ results, imageErrors, videoErrors, invalidUrls });
@@ -201,7 +214,7 @@ const extractVideosFromHtml = (html) => {
     return videos;
 };
 
-const extractVideoUrlsFromIFrame = async (page, connection, urlId) => {
+const extractVideoUrlsFromIFrame = async (page) => {
     const frameHandles = await page.$$('iframe');
     const videoUrls = [];
 
@@ -209,42 +222,13 @@ const extractVideoUrlsFromIFrame = async (page, connection, urlId) => {
         const frame = await frameHandle.contentFrame();
         if (frame) {
             try {
-                await frame.waitForSelector('video, [data-video-url]', { timeout: 10000 });
                 const videos = await frame.$$eval('video source', vids => vids.map(vid => ({ url: vid.src, title: vid.title })));
-                for (const { url: videoUrl, title: videoTitle } of videos) {
-                    // Check if the video URL already exists in the database
-                    const [existingVideo] = await connection.query(
-                        'SELECT id FROM Videos WHERE video_url = ?',
-                        [videoUrl]
-                    );
-
-                    if (existingVideo.length === 0) {
-                        await connection.query(
-                            'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
-                            [urlId, videoUrl, videoTitle]
-                        );
-                        videoUrls.push({ url: videoUrl, title: videoTitle });
-                    }
-                }
+                videoUrls.push(...videos);
 
                 const embeddedVideoUrls = await frame.$$eval('[data-video-url]', elements => elements.map(el => ({ url: el.getAttribute('data-video-url'), title: el.title })));
-                for (const { url: videoUrl, title: videoTitle } of embeddedVideoUrls) {
-                    // Check if the video URL already exists in the database
-                    const [existingVideo] = await connection.query(
-                        'SELECT id FROM Videos WHERE video_url = ?',
-                        [videoUrl]
-                    );
-
-                    if (existingVideo.length === 0) {
-                        await connection.query(
-                            'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
-                            [urlId, videoUrl, videoTitle]
-                        );
-                        videoUrls.push({ url: videoUrl, title: videoTitle });
-                    }
-                }
+                videoUrls.push(...embeddedVideoUrls);
             } catch (error) {
-                logger.warn(`No video elements found in iframe: ${error.message}`);
+                Logger.warn(`No video elements found in iframe: ${error.message}`);
             }
         }
     }
@@ -252,49 +236,19 @@ const extractVideoUrlsFromIFrame = async (page, connection, urlId) => {
     return videoUrls;
 };
 
-const extractVideoUrlsFromVideoElements = async (page, connection, urlId) => {
+const extractVideoUrlsFromVideoElements = async (page) => {
     const videoUrls = [];
 
-    await page.waitForSelector('video, [data-video-url]', { timeout: 10000 });
-
     const videoSrcs = await page.$$eval('video source', sources => sources.map(source => ({ url: source.src, title: source.title })));
-    for (const { url: videoUrl, title: videoTitle } of videoSrcs) {
-        // Check if the video URL already exists in the database
-        const [existingVideo] = await connection.query(
-            'SELECT id FROM Videos WHERE video_url = ?',
-            [videoUrl]
-        );
-
-        if (existingVideo.length === 0) {
-            await connection.query(
-                'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
-                [urlId, videoUrl, videoTitle]
-            );
-            videoUrls.push({ url: videoUrl, title: videoTitle });
-        }
-    }
+    videoUrls.push(...videoSrcs);
 
     const embeddedVideoUrls = await page.$$eval('[data-video-url]', elements => elements.map(el => ({ url: el.getAttribute('data-video-url'), title: el.title })));
-    for (const { url: videoUrl, title: videoTitle } of embeddedVideoUrls) {
-        // Check if the video URL already exists in the database
-        const [existingVideo] = await connection.query(
-            'SELECT id FROM Videos WHERE video_url = ?',
-            [videoUrl]
-        );
-
-        if (existingVideo.length === 0) {
-            await connection.query(
-                'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
-                [urlId, videoUrl, videoTitle]
-            );
-            videoUrls.push({ url: videoUrl, title: videoTitle });
-        }
-    }
+    videoUrls.push(...embeddedVideoUrls);
 
     return videoUrls.filter(video => video.url);
 };
 
-const extractVideoUrlsFromNetwork = async (page, connection, urlId) => {
+const extractVideoUrlsFromNetwork = async (page) => {
     const videoUrls = new Set();
 
     page.on('response', async response => {
@@ -302,23 +256,9 @@ const extractVideoUrlsFromNetwork = async (page, connection, urlId) => {
         const contentType = response.headers()['content-type'];
 
         if (contentType && contentType.startsWith('video/')) {
-            // Check if the video URL already exists in the database
-            const [existingVideo] = await connection.query(
-                'SELECT id FROM Videos WHERE video_url = ?',
-                [url]
-            );
-
-            if (existingVideo.length === 0) {
-                await connection.query(
-                    'INSERT INTO Videos (url_id, video_url, title) VALUES (?, ?, ?)',
-                    [urlId, url, '']
-                );
-                videoUrls.add({ url, title: '' });
-            }
+            videoUrls.add({ url, title: '' });
         }
     });
-
-    await new Promise(resolve => setTimeout(resolve, 10000));
 
     return [...videoUrls];
 };

@@ -11,7 +11,6 @@ const DbPool = mysql.createPool({
     queueLimit: 0
 });
 
-// Function to create tables if they do not exist
 const InitilizeTables = async () => {
     const connection = await DbPool.getConnection();
     try {

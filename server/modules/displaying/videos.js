@@ -4,7 +4,7 @@ const GetAllVideos = (pool) => async (req, res, next) => {
     const connection = await pool.getConnection();
     try {
         const [rows] = await connection.query(
-            'SELECT image_url, title FROM Videos WHERE title LIKE ? LIMIT ? OFFSET ?',
+            'SELECT video_url, title FROM Videos WHERE title LIKE ? LIMIT ? OFFSET ?',
             [`%${search}%`, parseInt(limit), parseInt(offset)]
         );
         res.json(rows);
