@@ -1,7 +1,5 @@
 const basicAuth = require('basic-auth');
 
-const template = require("../../modules/utils/response_template")
-
 const Auth = (req, res, next) => {
     const user = basicAuth(req);
     if (!user || user.name !== 'admin' || user.pass !== 'password') {
