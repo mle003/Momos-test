@@ -17,17 +17,11 @@ This project is a web scraping server built with Node.js, Express, Puppeteer, an
 
 ## Installation
 
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/yourusername/web-scraping-server.git
-   cd web-scraping-server
-
-2. Install dependencies:
+1. Install dependencies:
 
     ```npm install
 
-3. Create a .env file in the root directory and add the following environment variables:
+2. Create a .env file in the root directory and add the following environment variables:
 
     ``` PORT=3000
         DB_HOST=localhost

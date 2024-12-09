@@ -11,7 +11,7 @@ const ImageList = () => {
     const [page, setPage] = useState(1);
     const [limit] = useState(10);
     const [search, setSearch] = useState('');
-    let debounceSearch = useDebounce(search, 500)
+    let debounceSearch = useDebounce(search, 700)
 
     useEffect(() => {
         const fetchImages = async () => {
@@ -24,6 +24,7 @@ const ImageList = () => {
                         password: process.env.REACT_APP_PASSWORD
                     }
                 });
+                console.log(response.data)
                 setImages(response.data);
             } catch (error) {
                 setError(error);
@@ -37,7 +38,7 @@ const ImageList = () => {
 
     const handleSearchChange = (e) => {
         setSearch(e.target.value);
-        setPage(1); // Reset to first page on new search
+        setPage(1);
     };
 
     if (loading) return <p>Loading...</p>;
