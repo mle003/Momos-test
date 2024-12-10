@@ -75,11 +75,11 @@ const Scraping = (pool) => async (req, res, next) => {
                     const iframeVideos = await extractVideoUrlsFromIFrame(page);
                     allVideos.push(...iframeVideos.map(video => ({ ...video, urlId })));
 
-                    const otherVideos = await extractVideoUrlsFromVideoElements(page);
-                    allVideos.push(...otherVideos.map(video => ({ ...video, urlId })));
+                    const videosFromVideoElements = await extractVideoUrlsFromVideoElements(page);
+                    allVideos.push(...videosFromVideoElements.map(video => ({ ...video, urlId })));
 
-                    const videos2 = await extractVideoUrlsFromNetwork(page);
-                    allVideos.push(...videos2.map(video => ({ ...video, urlId })));
+                    const networkVideos = await extractVideoUrlsFromNetwork(page);
+                    allVideos.push(...networkVideos.map(video => ({ ...video, urlId })));
 
                     if (allVideos.length === 0) {
                         throw new Error('No videos found');
