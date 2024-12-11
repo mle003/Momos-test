@@ -1,6 +1,6 @@
-# React Video List Application
+# React Scraped Videos and Images List Application
 
-This project is a React application that displays a list of videos with search and pagination functionality. The application is dockerized and can be run using Docker Compose.
+This project is a React application that displays a list of videos and images scarped by the server with search and pagination functionality. The application is dockerized and can be run using Docker Compose.
 
 ## Getting Started
 
@@ -37,6 +37,7 @@ You can run the application using Docker Compose.
 2. Running on local environment:
 
     ```bash
+    npm install
     npm start
     ``` 
 
