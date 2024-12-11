@@ -31,10 +31,16 @@ You can run the application using Docker Compose.
 1. Build and start the Docker containers:
 
     ```bash
-    docker-compose up --build
+    DOCKER_BUILDKIT=1 docker-compose up --build
     ```
 
-2. Open your browser and navigate to `http://localhost:8080` to see the application running.
+2. Running on local environment:
+
+    ```bash
+    npm start
+    ``` 
+
+3. Open your browser and navigate to `http://localhost:8080` to see the application running.
 
 ### Environment Variables
 

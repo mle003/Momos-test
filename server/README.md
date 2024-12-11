@@ -32,5 +32,16 @@ This project is a web scraping server built with Node.js, Express, Puppeteer, an
 
 ## Running Server
 
-    ``` npm start
-        npm run dev // for test env
+1. Build and start the Docker containers:
+
+    ```bash
+    DOCKER_BUILDKIT=1 docker-compose up --build
+    ```
+
+2. Running on local environment:
+
+    ```bash
+    npm run dev
+    ```
+
+3. Send api request to hos `http://localhost:3000` to see the server running.

@@ -19,6 +19,8 @@ const Scraping = (pool) => async (req, res, next) => {
     const allImages = [];
     const allVideos = [];
 
+    const connection = await pool.getConnection();
+
     try {
         const browser = await puppeteer.launch();
         await Promise.all(urls.map(async (url) => {
@@ -26,8 +28,6 @@ const Scraping = (pool) => async (req, res, next) => {
             let imageError = null;
             let videoError = null;
             let urlId;
-
-            const connection = await pool.getConnection();
 
             const [urlResult] = await connection.query(
                 'INSERT INTO URLs (url, is_valid) VALUES (?, ?)',
@@ -190,6 +190,7 @@ const Scraping = (pool) => async (req, res, next) => {
         await browser.close();
         res.json({ results, imageErrors, videoErrors, invalidUrls });
     } catch (error) {
+        connection.release()
         next(error);
     }
 };

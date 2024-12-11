@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: mysql:5.7
+    image: mysql/mysql-server:latest
     container_name: mysql
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword

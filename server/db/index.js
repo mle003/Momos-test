@@ -1,6 +1,8 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
+const Logger = require("../utils/logger")
+
 const DbPool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -54,7 +56,7 @@ const InitilizeTables = async () => {
             )
         `);
     } catch (error) {
-        console.error('Error creating tables:', error);
+        Logger.error('Error creating tables:', error);
     } finally {
         connection.release();
     }
