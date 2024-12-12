@@ -22,7 +22,10 @@ const Scraping = (pool) => async (req, res, next) => {
     const connection = await pool.getConnection();
 
     try {
-        const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch({
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
         await Promise.all(urls.map(async (url) => {
             const result = { url, title: '', images: [], videos: [] };
             let imageError = null;

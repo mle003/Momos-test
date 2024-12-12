@@ -26,12 +26,12 @@ This project is a web scraping server built with Node.js, Express, Puppeteer, an
 2. Create a .env file in the root directory and add the following environment variables:
 
     ``` 
-    PORT=3000
-    DB_HOST=localhost
-    DB_USER=your_mysql_user
-    DB_PASSWORD=your_mysql_password
-    DB_NAME=scraping_db
-    DB_CONNECTION_LIMIT=10
+    DB_NAME
+    DB_USER
+    DB_PASSWORD
+    DB_HOST
+    DB_CONNECTION_LIMIT
+    ```
 
 ## Running Server
 

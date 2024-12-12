@@ -1,7 +1,7 @@
-# Use the official Node.js image
-FROM node:18
+# Use the browserless/chrome image that includes Chromium and Puppeteer
+FROM browserless/chrome:latest
 
-# Create and change to the app directory
+# Set the working directory
 WORKDIR /usr/src/app
 
 # Copy package.json and package-lock.json
