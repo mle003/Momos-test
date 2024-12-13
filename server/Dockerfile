@@ -1,13 +1,13 @@
-# Use the browserless/chrome image that includes Chromium and Puppeteer
-FROM browserless/chrome:latest
+# Use the official Puppeteer image
+FROM ghcr.io/puppeteer/puppeteer:18.0.0
 
-# Set the working directory
+# Create and change to the app directory
 WORKDIR /usr/src/app
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
+# Install Node.js dependencies
 RUN npm install
 
 # Copy the rest of the application code
