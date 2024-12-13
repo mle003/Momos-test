@@ -27,6 +27,7 @@ const Scraping = (pool) => async (req, res, next) => {
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
         await Promise.all(urls.map(async (url) => {
+            Logger.info(`Start scraping ${url}`)
             const result = { url, title: '', images: [], videos: [] };
             let imageError = null;
             let videoError = null;
